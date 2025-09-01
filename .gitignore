@@ -38,4 +38,21 @@ yarn-error.log*
 Thumbs.db
 
 # Logs
-*.lognul
+*.log
+nul
+
+# Images and assets
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.ico
+*.svg
+
+# NDI SDK assets and examples (too large for repo)
+NDI 6 SDK/
+
+# Debug/testing files
+backend-failure*.png
+test_frame.dat
