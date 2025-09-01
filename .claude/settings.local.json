@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(build.bat)",
+      "Bash(cmd /c:*)",
+      "Bash(cmake:*)",
+      "Bash(npm run build:*)",
+      "Bash(start /B build\\Release\\ndi_router_v2.exe)",
+      "Bash(dir)",
+      "Bash(./ndi_router_v2.exe)",
+      "Bash(curl:*)",
+      "Bash(./build/Release/ndi_router_v2.exe)",
+      "Bash(python:*)",
+      "Bash(npm run dev:*)",
+      "Bash(./build.bat)",
+      "Bash(tasklist)",
+      "Bash(start /B:*)",
+      "Bash(timeout:*)",
+      "Bash(.build.bat)",
+      "Bash(buildReleasendi_router_v2.exe)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": []
+  }
+}

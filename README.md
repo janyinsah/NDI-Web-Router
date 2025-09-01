@@ -1,15 +1,18 @@
 # NDI Web Router v2
 
-A web-based NDI source routing application that allows any device on the network to route NDI sources without requiring NDI tools to be installed locally. Built with C++ backend for high-performance video processing and React/Next.js frontend for an intuitive web interface.
+A web-based NDI source routing application that allows any device on the network to route NDI sources without requiring NDI tools to be installed locally. Built with C++ backend for high-performance video processing and React/Vite frontend for an intuitive web interface.
 
 ## Features
 
+- **Multi-Destination Routing**: Route one NDI source to multiple destinations simultaneously
 - **NDI Source Discovery**: Automatically discovers all NDI sources on the network
 - **Web-based Interface**: Access from any device with a web browser
 - **Real-time Routing**: Create and manage NDI routes with minimal latency
 - **No Local Installation**: No need to install NDI tools on client devices
 - **High Performance**: C++ backend ensures efficient video processing without freezing
-- **Cross-platform**: Works on Windows, with potential for Linux/macOS support
+- **Cross-platform**: Works on Windows and Linux (Ubuntu Server ready)
+- **Service Discovery**: Integrates with NDI Discovery Server and Avahi/mDNS
+- **Production Ready**: Systemd service, Nginx reverse proxy, and auto-start capability
 
 ## Architecture
 
@@ -30,7 +33,34 @@ A web-based NDI source routing application that allows any device on the network
 - Node.js 16+ and npm
 - Modern web browser
 
-## Setup Instructions
+## Installation
+
+### Ubuntu Server (Recommended for Production)
+
+For a lightweight, dedicated NDI routing appliance on Ubuntu Server:
+
+```bash
+# Clone the repository
+git clone https://github.com/janyinsah/NDI-Web-Router.git
+cd NDI-Web-Router
+
+# Make scripts executable
+chmod +x scripts/*.sh
+
+# Install NDI SDK (download from https://ndi.video/sdk/)
+# Follow NDI SDK installation instructions for Linux
+
+# Build and install
+./scripts/build-linux.sh
+sudo ./scripts/install-linux.sh
+
+# Optional: Setup NDI Discovery Server
+sudo ./scripts/setup-ndi-discovery.sh
+```
+
+**See [Ubuntu Installation Guide](docs/UBUNTU_INSTALL.md) for detailed instructions.**
+
+### Windows Development Setup
 
 ### 1. NDI SDK Installation
 1. Download the NDI SDK from [Vizrt Developer](https://www.vizrt.com/developer/)
@@ -48,34 +78,20 @@ A web-based NDI source routing application that allows any device on the network
            └── Processing.NDI.Lib.x64.dll
    ```
 
-### 2. Backend Build
+### 2. Build on Windows
 ```bash
-# Create build directory
-mkdir build
-cd build
+# Use the provided build script
+build.bat
 
-# Configure with CMake
-cmake ..
-
-# Build the project
+# Or manually:
+mkdir build && cd build
+cmake .. 
 cmake --build . --config Release
 
-# The executable will be in the Release folder
-```
-
-### 3. Frontend Setup
-```bash
+# Frontend
 cd frontend
-
-# Install dependencies
 npm install
-
-# Start development server
-npm run dev
-
-# Or build for production
 npm run build
-npm start
 ```
 
 ## Running the Application
@@ -106,11 +122,23 @@ Open your web browser and navigate to `http://localhost:3000`
 
 ## Usage
 
+### Basic Routing
 1. **Discover Sources**: The application automatically discovers NDI sources on your network
-2. **Select Source**: Click on a source from the list to select it
-3. **Create Route**: Enter a destination name and click "Create Route"
-4. **Manage Routes**: View active routes and delete them as needed
-5. **Monitor Status**: Real-time updates show route status and source availability
+2. **Assign Sources**: Assign NDI sources to numbered source slots 
+3. **Create Destinations**: Add output destinations using the "Add Output" button
+4. **Single Route**: Click a source slot, then click a destination to create a route
+
+### Multi-Destination Routing (New Feature)
+1. **Select Source**: Click a source slot that has an assigned NDI source
+2. **Enable Multi-Route**: Click the "Multi-Route" button that appears
+3. **Select Destinations**: Click multiple destination slots to select them (they'll highlight in blue)
+4. **Apply Routes**: Click "Apply" to route the source to all selected destinations simultaneously
+5. **Monitor**: The same NDI stream will now be sent to all selected destinations
+
+### Web Interface Access
+- **Ubuntu Server**: http://[server-ip-address] (automatically discoverable on network)
+- **Windows Dev**: http://localhost:3000 (frontend) + backend on port 8080
+- **Service Management**: `sudo systemctl status ndi-web-router` (Ubuntu)
 
 ## Configuration
 
