@@ -8,7 +8,9 @@
 #pragma comment(lib, "ws2_32.lib")
 
 WebServer::WebServer(int port, std::shared_ptr<NDIManager> ndi_manager)
-    : port_(port), is_running_(false), ndi_manager_(ndi_manager) {}
+    : port_(port), is_running_(false), ndi_manager_(ndi_manager) {
+    // auth_manager_ = std::make_unique<AuthManager>();  // Temporarily disabled for build
+}
 
 WebServer::~WebServer() {
     Stop();
@@ -20,6 +22,13 @@ bool WebServer::Start() {
         std::cerr << "WSAStartup failed" << std::endl;
         return false;
     }
+
+    // Initialize authentication manager - Temporarily disabled for build
+    // if (!auth_manager_->Initialize()) {
+    //     std::cerr << "Failed to initialize authentication manager" << std::endl;
+    //     WSACleanup();
+    //     return false;
+    // }
 
     is_running_ = true;
     server_thread_ = std::make_unique<std::thread>(&WebServer::ServerThreadFunction, this);
@@ -78,7 +87,7 @@ void WebServer::HandleRequest(int client_socket) {
         std::string request(buffer);
         
         std::string response;
-        std::string cors_headers = "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n";
+        std::string cors_headers = "Access-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, DELETE, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization\r\n";
         
         if (request.find("OPTIONS") == 0) {
             response = "HTTP/1.1 200 OK\r\n" + cors_headers + "\r\n";
@@ -219,21 +228,22 @@ void WebServer::HandleRequest(int client_socket) {
             size_t body_pos = request.find("\r\n\r\n");
             std::string body = (body_pos != std::string::npos) ? request.substr(body_pos + 4) : "";
             response = "HTTP/1.1 200 OK\r\n" + cors_headers + "Content-Type: application/json\r\n\r\n" + HandleRemoveMatrixRoute(body);
-        } else if (request.find("POST /api/preview/source") != std::string::npos) {
+        } else if (request.find("POST /api/studio-monitors/set-source") != std::string::npos) {
+            size_t body_pos = request.find("\r\n\r\n");
+            std::string body = (body_pos != std::string::npos) ? request.substr(body_pos + 4) : "";
+            response = "HTTP/1.1 200 OK\r\n" + cors_headers + "Content-Type: application/json\r\n\r\n" + HandleSetStudioMonitorSource(body);
+        } else if (request.find("GET /api/studio-monitors/current-source") != std::string::npos) {
+            response = "HTTP/1.1 200 OK\r\n" + cors_headers + "Content-Type: application/json\r\n\r\n" + HandleGetStudioMonitorSource();
+        } else if (request.find("POST /api/preview/set-source") != std::string::npos) {
             size_t body_pos = request.find("\r\n\r\n");
             std::string body = (body_pos != std::string::npos) ? request.substr(body_pos + 4) : "";
             response = "HTTP/1.1 200 OK\r\n" + cors_headers + "Content-Type: application/json\r\n\r\n" + HandleSetPreviewSource(body);
-        } else if (request.find("GET /api/preview/source") != std::string::npos) {
+        } else if (request.find("GET /api/preview/current-source") != std::string::npos) {
             response = "HTTP/1.1 200 OK\r\n" + cors_headers + "Content-Type: application/json\r\n\r\n" + HandleGetPreviewSource();
-        } else if (request.find("GET /api/preview/frame") != std::string::npos) {
-            std::string frame_data = HandleGetPreviewFrame();
-            if (frame_data.empty()) {
-                response = "HTTP/1.1 204 No Content\r\n" + cors_headers + "\r\n";
-            } else {
-                response = "HTTP/1.1 200 OK\r\n" + cors_headers + "Content-Type: application/octet-stream\r\n\r\n" + frame_data;
-            }
-        } else if (request.find("DELETE /api/preview/source") != std::string::npos) {
-            response = "HTTP/1.1 200 OK\r\n" + cors_headers + "Content-Type: application/json\r\n\r\n" + HandleClearPreviewSource();
+        } else if (request.find("GET /api/preview/image") != std::string::npos) {
+            response = "HTTP/1.1 200 OK\r\n" + cors_headers + "Content-Type: application/json\r\n\r\n" + HandleGetPreviewImage();
+        } else if (request.find("POST /api/preview/clear") != std::string::npos) {
+            response = "HTTP/1.1 200 OK\r\n" + cors_headers + "Content-Type: application/json\r\n\r\n" + HandleClearPreview();
         } else {
             response = "HTTP/1.1 404 Not Found\r\n" + cors_headers + "\r\nEndpoint not found";
         }
@@ -513,6 +523,44 @@ std::string WebServer::HandleUnassignDestination(int destination_slot) {
     }
 }
 
+std::string WebServer::HandleSetStudioMonitorSource(const std::string& request_body) {
+    std::cout << "Handling set studio monitor source request" << std::endl;
+    
+    // Parse JSON to extract source name
+    size_t name_pos = request_body.find("\"sourceName\":");
+    if (name_pos == std::string::npos) {
+        return "{\"error\":\"Missing sourceName field\"}";
+    }
+    
+    name_pos = request_body.find("\"", name_pos + 13);
+    if (name_pos == std::string::npos) {
+        return "{\"error\":\"Invalid sourceName format\"}";
+    }
+    
+    size_t name_end = request_body.find("\"", name_pos + 1);
+    if (name_end == std::string::npos) {
+        return "{\"error\":\"Invalid sourceName format\"}";
+    }
+    
+    std::string source_name = request_body.substr(name_pos + 1, name_end - name_pos - 1);
+    
+    if (ndi_manager_->SetStudioMonitorSource(source_name)) {
+        return "{\"success\":true,\"message\":\"Studio monitor source set successfully\"}";
+    } else {
+        return "{\"error\":\"Failed to set studio monitor source\"}";
+    }
+}
+
+std::string WebServer::HandleGetStudioMonitorSource() {
+    std::string current_source = ndi_manager_->GetStudioMonitorSource();
+    if (current_source.empty()) {
+        return "{\"source\":null}";
+    } else {
+        return "{\"source\":\"" + current_source + "\"}";
+    }
+}
+
+// Preview API Handlers
 std::string WebServer::HandleSetPreviewSource(const std::string& request_body) {
     std::cout << "Handling set preview source request" << std::endl;
     
@@ -535,7 +583,7 @@ std::string WebServer::HandleSetPreviewSource(const std::string& request_body) {
     std::string source_name = request_body.substr(name_pos + 1, name_end - name_pos - 1);
     
     if (ndi_manager_->SetPreviewSource(source_name)) {
-        return "{\"success\":true,\"message\":\"Preview source set successfully\"}";
+        return "{\"success\":true,\"message\":\"Preview source set to " + source_name + "\"}";
     } else {
         return "{\"error\":\"Failed to set preview source\"}";
     }
@@ -550,19 +598,18 @@ std::string WebServer::HandleGetPreviewSource() {
     }
 }
 
-std::string WebServer::HandleGetPreviewFrame() {
-    auto frame_data = ndi_manager_->CapturePreviewFrame();
-    if (frame_data.empty()) {
-        return "";  // Empty response indicates no frame available
+std::string WebServer::HandleGetPreviewImage() {
+    std::string image_data = ndi_manager_->GetPreviewImage();
+    if (image_data.empty()) {
+        return "{\"image\":null}";
+    } else {
+        return "{\"image\":\"" + image_data + "\"}";
     }
-    
-    // Convert vector<uint8_t> to string for HTTP response
-    return std::string(frame_data.begin(), frame_data.end());
 }
 
-std::string WebServer::HandleClearPreviewSource() {
+std::string WebServer::HandleClearPreview() {
     ndi_manager_->ClearPreviewSource();
-    return "{\"success\":true,\"message\":\"Preview source cleared\"}";
+    return "{\"success\":true,\"message\":\"Preview cleared\"}";
 }
 
 // Bulk routing operations
@@ -638,3 +685,4 @@ std::string WebServer::HandleGetDestinationsForSource(int source_slot) {
     json << "]}";
     return json.str();
 }
+

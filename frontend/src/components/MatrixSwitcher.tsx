@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Plus, Settings, Monitor, Video, Zap, Check, Eye, EyeOff } from 'lucide-react';
 import { NDISource, MatrixSourceSlot, MatrixDestination, MatrixRoute } from '@/types/ndi';
-import { usePreviewMonitor } from '@/hooks/usePreviewMonitor';
+import { useStudioMonitor } from '@/hooks/useStudioMonitor';
+import { usePreview } from '@/hooks/usePreview';
 
 interface MatrixSwitcherProps {
   sources: NDISource[];
@@ -48,23 +49,43 @@ const MatrixSwitcher: React.FC<MatrixSwitcherProps> = ({
   const [showUnassignDialog, setShowUnassignDialog] = useState<number | null>(null);
   const [newDestinationName, setNewDestinationName] = useState('');
   
-  // Preview monitor
-  const { currentSource, previewImage, isLoading, setPreviewSource } = usePreviewMonitor();
+  // Studio monitor and preview
+  const { currentSource: studioMonitorSource, isVisible: studioMonitorVisible, setStudioMonitorSource, toggleVisibility } = useStudioMonitor();
+  const { currentSource: previewSource, previewImage, isLoading: previewLoading, setPreviewSource, clearPreview } = usePreview();
 
   // Find active route for a destination
   const findActiveRoute = (destinationSlot: number): MatrixRoute | null => {
     return routes.find(route => route.destinationSlot === destinationSlot && route.active) || null;
   };
 
-  // Handle source slot click
-  const handleSourceSlotClick = (slotNumber: number) => {
+  // Handle source slot click - activates both preview and studio monitor
+  const handleSourceSlotClick = async (slotNumber: number) => {
+    const sourceSlot = sourceSlots.find(slot => slot.slotNumber === slotNumber);
+    
     if (selectedSourceSlot === slotNumber) {
       setSelectedSourceSlot(null); // Deselect if already selected
       setIsMultiSelectMode(false);
       setSelectedDestinations(new Set());
+      // Clear preview when deselecting
+      clearPreview().catch(error => 
+        console.error('Failed to clear preview:', error)
+      );
     } else {
       setSelectedSourceSlot(slotNumber);
       setSelectedDestinations(new Set());
+      
+      // Set preview and studio monitor for assigned source
+      if (sourceSlot?.isAssigned && sourceSlot.assignedNdiSource) {
+        // Set preview and studio monitor without blocking UI
+        Promise.all([
+          setPreviewSource(sourceSlot.assignedNdiSource).catch(error => 
+            console.error('Failed to set preview source:', error)
+          ),
+          setStudioMonitorSource(sourceSlot.assignedNdiSource).catch(error => 
+            console.error('Failed to set studio monitor source:', error)
+          )
+        ]);
+      }
       
       // Auto-enable multi-select mode if source has existing routes
       const existingDestinations = routes
@@ -378,11 +399,11 @@ const MatrixSwitcher: React.FC<MatrixSwitcherProps> = ({
           </div>
         </div>
 
-        {/* Center Preview Area */}
+        {/* Center Studio Monitor Area */}
         <div className="w-full lg:w-80 flex flex-col items-center lg:order-none order-first">
-          {/* Preview Monitor */}
+          {/* Studio Monitor */}
           <div className="w-full aspect-video max-w-sm lg:max-w-none lg:h-48 bg-black rounded-md border border-gray-600 relative mb-4 overflow-hidden">
-            {previewImage ? (
+            {previewImage && previewImage !== "data:image/jpeg;base64,FRAME_DATA_PLACEHOLDER" ? (
               <img 
                 src={previewImage} 
                 alt="NDI Preview" 
@@ -393,28 +414,34 @@ const MatrixSwitcher: React.FC<MatrixSwitcherProps> = ({
                 <div className="text-center">
                   <div className="text-8xl font-bold text-gray-600 opacity-50">NDI</div>
                   <div className="text-xs text-gray-500 mt-1">
-                    {currentSource ? 'Connecting...' : 'Preview Monitor'}
+                    {previewLoading ? 'Loading...' : 
+                     previewSource ? 'Preview Active' : 
+                     'Select Source for Preview'}
                   </div>
                 </div>
               </div>
             )}
             
             {/* Preview source indicator */}
-            {currentSource && (
+            {previewSource && (
               <div className="absolute top-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
-                {currentSource.split(' ')[0]}
+                {previewSource.split(' ')[0]}
               </div>
             )}
             
-            {/* Preview controls */}
+            {/* Studio monitor controls */}
             <div className="absolute top-2 right-2 flex space-x-1">
-              {currentSource ? (
+              {studioMonitorSource ? (
                 <button
-                  onClick={() => setPreviewSource(null)}
-                  className="bg-red-600/80 hover:bg-red-600 text-white p-1 rounded"
-                  title="Clear preview"
+                  onClick={toggleVisibility}
+                  className={`text-white p-1 rounded ${
+                    studioMonitorVisible 
+                      ? 'bg-green-600/80 hover:bg-green-600' 
+                      : 'bg-gray-600/80 hover:bg-gray-600'
+                  }`}
+                  title={studioMonitorVisible ? 'Hide studio monitor' : 'Show studio monitor'}
                 >
-                  <EyeOff size={14} />
+                  {studioMonitorVisible ? <Eye size={14} /> : <EyeOff size={14} />}
                 </button>
               ) : (
                 <div className="bg-gray-800/80 text-gray-400 p-1 rounded">
@@ -424,25 +451,24 @@ const MatrixSwitcher: React.FC<MatrixSwitcherProps> = ({
             </div>
           </div>
           
-          {/* Preview Source Selector */}
+          {/* Studio Monitor Source Display */}
           <div className="w-full max-w-sm lg:max-w-none mb-4">
-            <select
-              value={currentSource || ''}
-              onChange={(e) => setPreviewSource(e.target.value || null)}
-              className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm ${
-                isConnected 
-                  ? 'bg-gray-100 dark:bg-gray-800 text-black dark:text-white' 
-                  : 'bg-gray-200 dark:bg-gray-900 text-gray-500 cursor-not-allowed'
-              }`}
-              disabled={isLoading || !isConnected}
-            >
-              <option value="">Select Preview Source</option>
-              {sources.map((source) => (
-                <option key={source.name} value={source.name}>
-                  {source.name}
-                </option>
-              ))}
-            </select>
+            <div className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm bg-gray-100 dark:bg-gray-800 text-black dark:text-white`}>
+              {studioMonitorSource ? (
+                <div className="flex items-center justify-between">
+                  <span>{studioMonitorSource}</span>
+                  <span className={`text-xs px-2 py-1 rounded ${
+                    studioMonitorVisible 
+                      ? 'bg-green-600 text-white' 
+                      : 'bg-gray-500 text-white'
+                  }`}>
+                    {studioMonitorVisible ? 'Visible' : 'Hidden'}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-gray-500">Select source for preview</span>
+              )}
+            </div>
           </div>
           
         </div>

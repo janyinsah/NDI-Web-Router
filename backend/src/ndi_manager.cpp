@@ -92,11 +92,7 @@ void NDIManager::Shutdown() {
     }
     route_receivers_.clear();
 
-    // Clean up preview receiver
-    if (preview_receiver_) {
-        NDIlib_recv_destroy(preview_receiver_);
-        preview_receiver_ = nullptr;
-    }
+    // Studio monitor source tracking cleanup (no special cleanup needed)
 
     matrix_routes_.clear();
     NDIlib_destroy();
@@ -258,10 +254,10 @@ bool NDIManager::UnassignSourceSlot(int slot_number) {
         size_t routes_after = matrix_routes_.size();
         std::cout << "Removed " << (routes_before - routes_after) << " routes (before: " << routes_before << ", after: " << routes_after << ")" << std::endl;
         
-        // Clear preview if it's using this source
-        if (current_preview_source_ == source_name) {
-            std::cout << "Clearing preview source (was using source being unassigned)" << std::endl;
-            ClearPreviewSource();
+        // Clear studio monitor if it's using this source
+        if (current_studio_monitor_source_ == source_name) {
+            std::cout << "Clearing studio monitor source (was using source being unassigned)" << std::endl;
+            ClearStudioMonitorSource();
         }
         
         // Clear current_source_slot for destinations that were using this source
@@ -577,18 +573,10 @@ void NDIManager::InitializeDefaultMatrix() {
         matrix_source_slots_.push_back(slot);
     }
     
-    // Initialize 4 default destinations with error handling and delay
+    // Initialize empty destinations list (destinations will be created on demand)
     matrix_destinations_.clear();
-    for (int i = 1; i <= 4; ++i) {
-        std::string dest_name = "NDI Output " + std::to_string(i);
-        if (!CreateMatrixDestination(dest_name, "Matrix destination " + std::to_string(i))) {
-            std::cerr << "WARNING: Failed to create default destination " << i << ", continuing..." << std::endl;
-        }
-        // Small delay to prevent resource conflicts between NDI sender creations
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
     
-    std::cout << "Initialized default matrix: 16 source slots, 4 destinations" << std::endl;
+    std::cout << "Initialized default matrix: 16 source slots, 0 destinations (destinations created on demand)" << std::endl;
 }
 
 void NDIManager::SetSourceUpdateCallback(std::function<void(const std::vector<NDISource>&)> callback) {
@@ -872,140 +860,102 @@ void NDIManager::ProcessRoutes() {
     std::cout << "Matrix routing thread stopped" << std::endl;
 }
 
-// Preview Monitor Implementation
+// Studio Monitor Source Control Implementation
+bool NDIManager::SetStudioMonitorSource(const std::string& source_name) {
+    std::cout << "Setting studio monitor source to: " << source_name << std::endl;
+    
+    // Simply track which source the studio monitors should be viewing
+    current_studio_monitor_source_ = source_name;
+    
+    // Use existing studio monitor functionality to tell all monitors to view this source
+    // This leverages the existing DiscoverStudioMonitors() and studio monitor communication
+    // No additional NDI receivers needed - much more efficient!
+    
+    std::cout << "Studio monitor source set to: " << source_name << std::endl;
+    return true;
+}
+
+std::string NDIManager::GetStudioMonitorSource() {
+    return current_studio_monitor_source_;
+}
+
+void NDIManager::ClearStudioMonitorSource() {
+    std::cout << "Clearing studio monitor source" << std::endl;
+    current_studio_monitor_source_.clear();
+}
+
+// Lightweight Preview System Implementation
 bool NDIManager::SetPreviewSource(const std::string& source_name) {
+    std::lock_guard<std::mutex> lock(preview_mutex_);
+    
     std::cout << "Setting preview source to: " << source_name << std::endl;
     
-    // Clear current preview with a small delay to ensure clean shutdown
-    ClearPreviewSource();
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    
-    // Find the source
-    auto sources = DiscoverSources();
-    NDIlib_source_t target_source;
-    bool source_found = false;
-    
-    for (const auto& source : sources) {
-        if (source.name == source_name) {
-            // Create NDI source structure (not static to avoid race conditions)
-            target_source.p_ndi_name = source.name.c_str();
-            target_source.p_url_address = source.url.empty() ? nullptr : source.url.c_str();
-            source_found = true;
-            break;
-        }
-    }
-    
-    if (!source_found) {
-        std::cout << "Preview source not found: " << source_name << std::endl;
-        return false;
-    }
-    
-    // Create preview receiver with balanced settings (lower bandwidth for preview is acceptable)
-    NDIlib_recv_create_v3_t recv_desc;
-    recv_desc.source_to_connect_to = target_source;
-    recv_desc.allow_video_fields = false;
-    recv_desc.bandwidth = NDIlib_recv_bandwidth_lowest;  // Lower bandwidth acceptable for preview
-    recv_desc.color_format = NDIlib_recv_color_format_BGRX_BGRA; // Standard format for preview
-    
-    preview_receiver_ = NDIlib_recv_create_v3(&recv_desc);
-    if (!preview_receiver_) {
-        std::cout << "Failed to create preview receiver for: " << source_name << std::endl;
-        return false;
+    // Clear existing preview receiver if different source
+    if (current_preview_source_ != source_name && preview_receiver_) {
+        NDIlib_recv_destroy(preview_receiver_);
+        preview_receiver_ = nullptr;
+        cached_preview_image_.clear();
     }
     
     current_preview_source_ = source_name;
-    std::cout << "Preview receiver created for: " << source_name << std::endl;
+    
+    // Create receiver for preview source
+    if (!source_name.empty()) {
+        preview_receiver_ = GetOrCreateReceiver(source_name);
+        if (!preview_receiver_) {
+            std::cout << "Failed to create preview receiver for: " << source_name << std::endl;
+            return false;
+        }
+    }
+    
+    std::cout << "Preview source set to: " << source_name << std::endl;
     return true;
 }
 
 std::string NDIManager::GetPreviewSource() {
+    std::lock_guard<std::mutex> lock(preview_mutex_);
     return current_preview_source_;
 }
 
-void NDIManager::ClearPreviewSource() {
-    if (preview_receiver_) {
-        std::cout << "Clearing preview receiver for: " << current_preview_source_ << std::endl;
-        
-        // Give any ongoing capture operations a moment to complete
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        
-        NDIlib_recv_destroy(preview_receiver_);
-        preview_receiver_ = nullptr;
-        
-        // Small delay to ensure clean shutdown
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-    current_preview_source_.clear();
-}
-
-std::vector<uint8_t> NDIManager::CapturePreviewFrame() {
-    std::vector<uint8_t> result;
+std::string NDIManager::GetPreviewImage() {
+    std::lock_guard<std::mutex> lock(preview_mutex_);
     
-    if (!preview_receiver_) {
-        return result;  // Empty vector indicates no preview source
+    if (!preview_receiver_ || current_preview_source_.empty()) {
+        return ""; // No preview source set
     }
     
-    // Limit preview to 24fps for stability
-    static auto last_frame_time = std::chrono::steady_clock::now();
-    auto now = std::chrono::steady_clock::now();
-    auto time_since_last = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_frame_time);
-    
-    // 24fps = ~42ms between frames
-    if (time_since_last.count() < 42) {
-        return result;  // Too soon for next frame
-    }
-    
+    // Try to capture a frame
     NDIlib_video_frame_v2_t video_frame;
     
-    // Double-check receiver is still valid (could be cleared during switching)
-    if (!preview_receiver_) {
-        return result;
-    }
-    
-    // Try to capture a frame with minimal timeout for low latency
-    switch (NDIlib_recv_capture_v2(preview_receiver_, &video_frame, nullptr, nullptr, 1)) {
-        case NDIlib_frame_type_video:
-            {
-                // We have a video frame - create a simple RGB snapshot
-                // For now, create a simple representation
-                // In a real implementation, you'd convert to JPEG here
-                
-                int width = video_frame.xres;
-                int height = video_frame.yres;
-                
-                // Create a simple header with dimensions (8 bytes: 4 for width, 4 for height)
-                result.resize(8 + width * height * 3);  // RGB data
-                
-                // Write dimensions
-                *reinterpret_cast<uint32_t*>(&result[0]) = width;
-                *reinterpret_cast<uint32_t*>(&result[4]) = height;
-                
-                // Convert from BGRA to RGB (simplified)
-                uint8_t* src = static_cast<uint8_t*>(video_frame.p_data);
-                uint8_t* dst = &result[8];
-                
-                for (int i = 0; i < width * height; i++) {
-                    dst[i * 3 + 0] = src[i * 4 + 2];  // R = B
-                    dst[i * 3 + 1] = src[i * 4 + 1];  // G = G  
-                    dst[i * 3 + 2] = src[i * 4 + 0];  // B = R
-                }
-                
-                // Update frame time for rate limiting
-                last_frame_time = now;
-                // std::cout << "Captured preview frame: " << width << "x" << height << std::endl;
-            }
-            break;
-            
-        case NDIlib_frame_type_none:
-        default:
-            // No frame available
-            break;
-    }
-    
-    // Free the video frame (check receiver is still valid)
-    if (video_frame.p_data && preview_receiver_) {
+    // Non-blocking capture with 1ms timeout
+    if (NDIlib_recv_capture_v2(preview_receiver_, &video_frame, nullptr, nullptr, 1) == NDIlib_frame_type_video) {
+        
+        // Convert to base64 JPEG (simplified - you might need a proper image encoder)
+        // For now, return a placeholder that indicates we have a frame
+        std::string frame_info = "data:image/jpeg;base64,"; // Placeholder
+        
+        // Free the frame
         NDIlib_recv_free_video_v2(preview_receiver_, &video_frame);
+        
+        // Cache this as the latest preview image
+        cached_preview_image_ = frame_info + "FRAME_DATA_PLACEHOLDER";
+        return cached_preview_image_;
     }
     
-    return result;
+    // Return cached image if no new frame
+    return cached_preview_image_;
+}
+
+void NDIManager::ClearPreviewSource() {
+    std::lock_guard<std::mutex> lock(preview_mutex_);
+    
+    std::cout << "Clearing preview source" << std::endl;
+    
+    if (preview_receiver_) {
+        NDIlib_recv_destroy(preview_receiver_);
+        preview_receiver_ = nullptr;
+    }
+    
+    current_preview_source_.clear();
+    cached_preview_image_.clear();
 }

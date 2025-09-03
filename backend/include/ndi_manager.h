@@ -7,6 +7,7 @@
 #include <thread>
 #include <atomic>
 #include <map>
+#include <mutex>
 #include <Processing.NDI.Lib.h>
 
 struct NDISource {
@@ -76,10 +77,15 @@ public:
     
     void SetSourceUpdateCallback(std::function<void(const std::vector<NDISource>&)> callback);
     
-    // Preview Monitor
+    // Studio Monitor Source Control
+    bool SetStudioMonitorSource(const std::string& source_name);
+    std::string GetStudioMonitorSource();
+    void ClearStudioMonitorSource();
+    
+    // Lightweight Preview System
     bool SetPreviewSource(const std::string& source_name);
     std::string GetPreviewSource();
-    std::vector<uint8_t> CapturePreviewFrame();  // Returns JPEG data
+    std::string GetPreviewImage(); // Returns base64 encoded JPEG
     void ClearPreviewSource();
 
 private:
@@ -94,9 +100,14 @@ private:
     // Map of source name to receiver for persistent connections
     std::map<std::string, NDIlib_recv_instance_t> route_receivers_;
     
-    // Preview monitor
-    NDIlib_recv_instance_t preview_receiver_;
+    // Studio monitor source tracking
+    std::string current_studio_monitor_source_;
+    
+    // Lightweight preview system
     std::string current_preview_source_;
+    NDIlib_recv_instance_t preview_receiver_;
+    std::string cached_preview_image_;
+    std::mutex preview_mutex_;
     
     std::string GenerateDestinationId();
     MatrixDestination* FindMatrixDestination(int slot_number);

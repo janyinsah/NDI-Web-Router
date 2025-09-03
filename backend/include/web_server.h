@@ -5,6 +5,7 @@
 #include <memory>
 #include <thread>
 #include "ndi_manager.h"
+// #include "auth_manager.h"  // Temporarily disabled for build
 
 class WebServer {
 public:
@@ -20,6 +21,7 @@ private:
     bool is_running_;
     std::shared_ptr<NDIManager> ndi_manager_;
     std::unique_ptr<std::thread> server_thread_;
+    // std::unique_ptr<AuthManager> auth_manager_;  // Temporarily disabled for build
     
     void ServerThreadFunction();
     void HandleRequest(int client_socket);
@@ -42,10 +44,14 @@ private:
     std::string HandleCreateMultipleRoutes(const std::string& request_body);
     std::string HandleRemoveAllRoutesFromSource(int source_slot);
     std::string HandleGetDestinationsForSource(int source_slot);
+    std::string HandleSetStudioMonitorSource(const std::string& request_body);
+    std::string HandleGetStudioMonitorSource();
+    
+    // Preview API handlers
     std::string HandleSetPreviewSource(const std::string& request_body);
     std::string HandleGetPreviewSource();
-    std::string HandleGetPreviewFrame();
-    std::string HandleClearPreviewSource();
+    std::string HandleGetPreviewImage();
+    std::string HandleClearPreview();
     
     std::string CreateJSONResponse(const std::string& data, int status_code = 200);
     std::string CreateErrorResponse(const std::string& error, int status_code = 400);

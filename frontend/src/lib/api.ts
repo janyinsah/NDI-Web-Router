@@ -36,6 +36,13 @@ const api = axios.create({
   },
 });
 
+// Simple error handling
+api.interceptors.response.use((response) => {
+  return response;
+}, (error) => {
+  return Promise.reject(error);
+});
+
 export class NDIApi {
   static async healthCheck(): Promise<{ status: string, timestamp: number }> {
     try {
@@ -264,10 +271,30 @@ export class NDIApi {
     }
   }
 
-  // Preview Monitor API Methods
+  // Studio Monitor Source Control API Methods
+  static async setStudioMonitorSource(sourceName: string): Promise<void> {
+    try {
+      await api.post('/api/studio-monitors/set-source', { sourceName });
+    } catch (error) {
+      console.error('Failed to set studio monitor source:', error);
+      throw new Error('Failed to set studio monitor source');
+    }
+  }
+
+  static async getStudioMonitorSource(): Promise<string | null> {
+    try {
+      const response = await api.get('/api/studio-monitors/current-source');
+      return response.data.source;
+    } catch (error) {
+      console.error('Failed to get studio monitor source:', error);
+      throw new Error('Failed to get studio monitor source');
+    }
+  }
+  
+  // Preview API Methods
   static async setPreviewSource(sourceName: string): Promise<void> {
     try {
-      await api.post('/api/preview/source', { sourceName });
+      await api.post('/api/preview/set-source', { sourceName });
     } catch (error) {
       console.error('Failed to set preview source:', error);
       throw new Error('Failed to set preview source');
@@ -276,7 +303,7 @@ export class NDIApi {
 
   static async getPreviewSource(): Promise<string | null> {
     try {
-      const response = await api.get('/api/preview/source');
+      const response = await api.get('/api/preview/current-source');
       return response.data.source;
     } catch (error) {
       console.error('Failed to get preview source:', error);
@@ -284,25 +311,22 @@ export class NDIApi {
     }
   }
 
-  static async getPreviewFrame(): Promise<ArrayBuffer | null> {
+  static async getPreviewImage(): Promise<string | null> {
     try {
-      const response = await api.get('/api/preview/frame', { 
-        responseType: 'arraybuffer',
-        timeout: 5000 
-      });
-      return response.data;
+      const response = await api.get('/api/preview/image');
+      return response.data.image;
     } catch (error) {
-      // It's normal for preview frame to fail if no source is set
-      return null;
+      console.error('Failed to get preview image:', error);
+      throw new Error('Failed to get preview image');
     }
   }
 
-  static async clearPreviewSource(): Promise<void> {
+  static async clearPreview(): Promise<void> {
     try {
-      await api.delete('/api/preview/source');
+      await api.post('/api/preview/clear');
     } catch (error) {
-      console.error('Failed to clear preview source:', error);
-      throw new Error('Failed to clear preview source');
+      console.error('Failed to clear preview:', error);
+      throw new Error('Failed to clear preview');
     }
   }
 }

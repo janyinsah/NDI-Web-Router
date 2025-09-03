@@ -34,12 +34,6 @@ function App() {
         <header className="mb-6 sm:mb-10">
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
             <div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-black dark:text-white mb-2">
-                NDI Web Router
-              </h1>
-              <p className="text-gray-800 dark:text-gray-200 text-base sm:text-lg">
-                Discover and re-route NDI devices remotely!
-              </p>
             </div>
             
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
@@ -51,7 +45,7 @@ function App() {
                 </span>
               </div>
               
-              <div className="flex space-x-2 sm:space-x-4">
+              <div className="flex items-center space-x-2 sm:space-x-4">
                 <button
                   onClick={toggleTheme}
                   className="p-2 sm:p-3 bg-gray-100 dark:bg-gray-900 rounded-md hover:bg-gray-200 dark:hover:bg-gray-800 transition-all duration-200 border border-gray-300 dark:border-gray-700"
@@ -78,23 +72,24 @@ function App() {
         </header>
 
         {error && (
-          <div className="mb-8 bg-gray-100 dark:bg-gray-900 border-l-4 border-black dark:border-white p-6 rounded-md">
-            <div className="flex items-center">
-              <AlertCircle className="text-black dark:text-white mr-3 flex-shrink-0" size={24} />
+          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md">
+            <div className="flex items-center space-x-3">
+              <AlertCircle className="text-red-500" size={20} />
               <div>
-                <h3 className="text-black dark:text-white font-semibold">Connection Error</h3>
-                <p className="text-gray-800 dark:text-gray-200 mt-1">{error}</p>
+                <h3 className="font-medium text-red-800 dark:text-red-200">Connection Error</h3>
+                <p className="text-red-700 dark:text-red-300">{error}</p>
               </div>
             </div>
           </div>
         )}
 
-        <div className="space-y-8">
+        <main>
           <MatrixSwitcher
             sources={sources}
             sourceSlots={sourceSlots}
             destinations={destinations}
             routes={routes}
+            loading={loading}
             isConnected={isConnected}
             onAssignSourceToSlot={assignSourceToSlot}
             onUnassignSourceSlot={unassignSourceSlot}
@@ -107,7 +102,7 @@ function App() {
             onCreateMultipleRoutes={createMultipleRoutes}
             onRemoveAllRoutesFromSource={removeAllRoutesFromSource}
           />
-        </div>
+        </main>
 
         <footer className="mt-16 text-center">
           <div className="bg-gray-100 dark:bg-gray-900 rounded-md p-6 border border-gray-300 dark:border-gray-700">

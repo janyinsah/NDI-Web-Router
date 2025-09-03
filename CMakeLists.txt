@@ -7,6 +7,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Find required packages
 find_package(Threads REQUIRED)
 
+# SQLite3 no longer needed - authentication removed
+
+# Find OpenSSL (optional for Windows build)
+if(NOT WIN32)
+    find_package(OpenSSL REQUIRED)
+endif()
+
 # Platform detection
 if(WIN32)
     set(NDI_PLATFORM "Win")
@@ -99,6 +106,8 @@ else()
         Threads::Threads
         ${NDI_LIBRARY}
         dl
+        OpenSSL::SSL
+        OpenSSL::Crypto
     )
 endif()
 
