@@ -56,3 +56,6 @@ NDI 6 SDK/
 # Debug/testing files
 backend-failure*.png
 test_frame.dat
+
+# Ignore claude files as irrelevant.
+.claude/
